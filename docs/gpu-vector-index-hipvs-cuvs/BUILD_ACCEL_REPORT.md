@@ -38,7 +38,7 @@ budget:
 | dimension | graph_degree | intermediate | nn_descent_niter |
 | --- | ---: | ---: | ---: |
 | <= 128 (SIFT250K) | 96 | 192 | 20 |
-| > 128 (Hidden250K) | 128 | 256 | 20 |
+| > 128 (Hidden250K) | 128 | 256 | 25 |
 
 The 128d path also shrinks the graph because measurements show no recall change
 there. The 256d path keeps the baseline graph degrees: the 256d baseline recall
@@ -78,9 +78,12 @@ per configuration (identical DDL and SQL shape to the contest):
 Recall is unaffected by the build-side change on either dataset. The `niter=5`
 runs bound the fixed cost of the path (table scan, buffer fill, transfer, graph
 serialisation, snapshot write, first query): about 6 s at 128d and 12 s at 256d,
-with each descent iteration costing ~0.41 s / ~0.36 s respectively. QPS drifts
-down monotonically across a sweep (GPU clock drift), so per-config QPS numbers
-are only comparable to the baseline measured in the same run.
+with each descent iteration costing ~0.41 s / ~0.36 s respectively.
+
+Query throughput does depend on how well the graph is refined: an interleaved
+A/B on the 256d workload (baseline measured before and after each candidate)
+gives 92.1% of baseline QPS at 20 iterations, 95.1% at 25 and 96.9% at 30, so
+the 256d path uses 25 to keep a safety margin over the 90% regression gate.
 
 The 256d configuration keeps the baseline graph degrees: the 256d baseline sits
 close to the recall gate, the baseline commit that fixed 256d recall raised both

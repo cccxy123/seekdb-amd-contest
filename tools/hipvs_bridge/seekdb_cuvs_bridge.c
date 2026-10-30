@@ -64,7 +64,7 @@ static long sk_param(const char* name, long def)
  * cut there (2.5x). */
 static size_t sk_build_gd(long dim)    { return (size_t)sk_param("SEEKDB_CUVS_GD", dim <= 128 ? 96 : 128); }
 static size_t sk_build_igd(long dim)   { return (size_t)sk_param("SEEKDB_CUVS_IGD", dim <= 128 ? 192 : 256); }
-static size_t sk_build_niter(long dim) { (void)dim; return (size_t)sk_param("SEEKDB_CUVS_NITER", 20); }
+static size_t sk_build_niter(long dim) { return (size_t)sk_param("SEEKDB_CUVS_NITER", dim <= 128 ? 20 : 25); }
 static int    sk_build_algo(long dim)  { (void)dim; return (int)sk_param("SEEKDB_CUVS_ALGO", 0); }
 
 static void sk_fill_tensor(DLManagedTensor* t, void* data, long* shape, int ndim,
