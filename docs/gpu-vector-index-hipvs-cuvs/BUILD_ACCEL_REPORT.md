@@ -37,15 +37,18 @@ budget:
 
 | dimension | graph_degree | intermediate | nn_descent_niter |
 | --- | ---: | ---: | ---: |
-| all | 96 | 128 | 20 |
+| <= 128 | 96 | 128 | 20 |
+| > 128 | 128 | 256 | 50 |
+For the 128d workload the graph shape, not the iteration count, is what the
+baseline over-spent on: pruning a 256-degree intermediate graph to 128, and
+every descent iteration, both scale with the intermediate degree, while a
+smaller final graph is not slower to search. 96/128 with the cuVS default 20
+iterations builds 3.8x faster with unchanged recall and query throughput.
 
-The graph shape, not the iteration count, is what the baseline over-spent on:
-pruning a 256-degree intermediate graph to 128, and every descent iteration,
-both scale with the intermediate degree, while a smaller final graph is not
-slower to search (it visits fewer neighbours per hop). 96/128 with the cuVS
-default 20 iterations builds 3.5x faster with unchanged recall and query
-throughput at or above baseline. cuVS itself defaults to 64/128, so 96/128
-stays above the library's own quality default.
+The 256d workload is different: an official evaluation of the 96/128/20 graph
+failed every 256d recall gate (recall@100 fell below 0.85 against a 0.914
+baseline), so the graph shape there stays exactly at the baseline's 128/256 and
+only the over-provisioned iteration budget is halved.
 
 Search parameters are unchanged from the baseline.
 
