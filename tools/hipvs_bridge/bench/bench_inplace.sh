@@ -111,18 +111,9 @@ cleanup() {
 trap cleanup EXIT
 wait_ready "$OPID" || { log "observer failed"; tail -30 "$RUNDIR/observer.log" >&2; exit 1; }
 
-log "loading $N rows dim=$DIM"
 mysql_bench -e "create database if not exists bench; use bench;
-  alter system set ob_vector_memory_limit_percentage=30;
-  drop table if exists items;
-  create table items(id bigint primary key, v vector($DIM));" >/dev/null
-mysql_bench -e "set ob_query_timeout=600000000; use bench; load data local infile '$DATA_DIR/base.tsv' into table items
-  fields terminated by '\t' lines terminated by '\n' (id,v);" >/dev/null
-cnt=$(mysql_bench -e "select count(*) from bench.items")
-log "loaded $cnt rows"
-[[ "$cnt" == "$N" ]] || { log "row count mismatch"; exit 1; }
+  alter system set ob_vector_memory_limit_percentage=30;" >/dev/null
 
-have_index=0
 IFS=';' read -r -a cfgs <<< "$CONFIGS"
 for cfg in "${cfgs[@]}"; do
   [[ -n "$cfg" ]] || continue
@@ -131,15 +122,18 @@ for cfg in "${cfgs[@]}"; do
   printf '%s\n' "${params//,/$'\n'}" > "$PARAM_FILE"
   log "config $name (${params:-defaults})"
 
-  if [[ "$have_index" == "1" ]]; then
-    mysql_bench -e "use bench; drop index idx_items on items;" >/dev/null
-  fi
+  log "reloading table for $name"
+  mysql_bench -e "use bench; drop table if exists items;
+    create table items(id bigint primary key, v vector($DIM));" >/dev/null
+  mysql_bench -e "set ob_query_timeout=600000000; use bench; load data local infile '$DATA_DIR/base.tsv' into table items fields terminated by '\t' lines terminated by '\n' (id,v);" >/dev/null
+  cnt=$(mysql_bench -e "select count(*) from bench.items")
+  [[ "$cnt" == "$N" ]] || { log "row count mismatch ($cnt)"; exit 1; }
+
   t0=$(now_ms)
   mysql_bench -e "set ob_query_timeout=600000000; use bench; create vector index idx_items on items(v)
     with (distance=l2, type=hnsw, lib=cuvs, m=16, ef_construction=200, ef_search=64);" >/dev/null
   mysql_bench -e "set ob_query_timeout=600000000; select id from bench.items order by l2_distance(v,$FIRST) approximate limit 10;" >"$RUNDIR/first.ids"
   t1=$(now_ms)
-  have_index=1
   rows=$(wc -l < "$RUNDIR/first.ids")
   [[ "$rows" -eq 10 ]] || log "WARN: first query returned $rows rows"
 
@@ -150,13 +144,14 @@ for cfg in "${cfgs[@]}"; do
 import json, sys, numpy as np
 d, tag, b, q10, q100, nq, out = sys.argv[1:8]
 b, q10, q100, nq = float(b), float(q10), float(q100), int(nq)
-def ids(path):
-    return [[int(x) for x in l.split()] for l in open(path) if l.strip()]
+def flat(path):
+    return [int(x) for l in open(path) if l.strip() for x in l.split()]
 gt = np.fromfile(f"{d}/gt100.i32", dtype=np.int32).reshape(-1, 100)
 def recall(path, k):
-    rows = ids(path); hit = tot = 0
-    for i, row in enumerate(rows[:len(gt)]):
-        s = set(row[:k]); g = set(int(x) for x in gt[i][:k])
+    vals = flat(path); hit = tot = 0
+    nq_seen = min(len(vals) // k, len(gt))
+    for i in range(nq_seen):
+        s = set(vals[i * k:(i + 1) * k]); g = set(int(x) for x in gt[i][:k])
         hit += len(s & g); tot += len(g)
     return hit / tot if tot else 0.0
 rec = {"tag": tag, "dim": None, "build_ms": round(b, 1), "build_s": round(b / 1000, 3),
