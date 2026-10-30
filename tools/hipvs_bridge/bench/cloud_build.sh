@@ -9,7 +9,7 @@
 set -uo pipefail
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-WORK=/tmp/cagra_bench
+WORK=${WORK:-/tmp/cagra_bench}
 BRIDGE_DIR=$WORK/bridge
 LOG=$WORK/build.log
 JOBS=${JOBS:-64}
