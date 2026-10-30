@@ -14,6 +14,8 @@ N=${N:-250000}
 NQ=${NQ:-4096}
 
 mkdir -p "$WORK"
+exec 9>"$WORK/.sweep.lock"
+if ! flock -n 9; then echo "another sweep is already running; refusing to start"; exit 1; fi
 LOG=$WORK/sweep.log
 exec > >(tee -a "$LOG") 2>&1
 log() { echo "[s3 $(date +%H:%M:%S)] $*"; }

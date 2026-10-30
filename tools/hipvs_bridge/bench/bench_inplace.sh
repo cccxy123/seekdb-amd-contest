@@ -70,6 +70,15 @@ PY
 )
 
 printf '' > "$PARAM_FILE"
+
+# Never share the port with a leftover observer from an earlier run: it would
+# silently serve our queries with the wrong table/schema.
+pkill -f "seekdb --base-dir" 2>/dev/null || true
+for _ in $(seq 1 40); do mysql_bench -e 'select 1' >/dev/null 2>&1 || break; sleep 0.5; done
+if mysql_bench -e 'select 1' >/dev/null 2>&1; then
+  log "port $PORT is already serving; aborting so we do not measure the wrong server"
+  exit 1
+fi
 ulimit -n 65535 || true
 ( cd "$RUNDIR" && exec env LD_LIBRARY_PATH="$BRIDGE_DIR:/opt/hipvs/lib:/opt/rocm/lib" \
   SEEKDB_CUVS_PARAM_FILE="$PARAM_FILE" \
@@ -78,7 +87,12 @@ ulimit -n 65535 || true
   --parameter datafile_maxsize=40G --parameter log_disk_size=10G \
   --parameter cpu_count=24 --log-level INFO ) >"$RUNDIR/observer.log" 2>&1 &
 OPID=$!
-trap 'kill -TERM $OPID 2>/dev/null || true' EXIT
+cleanup() {
+  kill -TERM "$OPID" 2>/dev/null || true
+  for _ in $(seq 1 40); do kill -0 "$OPID" 2>/dev/null || return 0; sleep 0.5; done
+  kill -KILL "$OPID" 2>/dev/null || true
+}
+trap cleanup EXIT
 wait_ready "$OPID" || { log "observer failed"; tail -30 "$RUNDIR/observer.log" >&2; exit 1; }
 
 log "loading $N rows dim=$DIM"
