@@ -41,7 +41,7 @@ for dim in 128 256; do
   bash "$SRC/tools/hipvs_bridge/bench/bench_inplace.sh" \
     --observer "$OBSERVER" --bridge "$BRIDGE" --data-dir "$WORK/data-$dim" \
     --dim "$dim" --n "$N" --nq "$NQ" --port 2881 --out "$OUT" --push \
-    --configs "base-d${dim}:\
+    --configs "base-d${dim}:;\
 n50-d${dim}:SEEKDB_CUVS_NITER=50;\
 n30-d${dim}:SEEKDB_CUVS_NITER=30;\
 g96i192n30-d${dim}:SEEKDB_CUVS_GD=96,SEEKDB_CUVS_IGD=192,SEEKDB_CUVS_NITER=30;\
