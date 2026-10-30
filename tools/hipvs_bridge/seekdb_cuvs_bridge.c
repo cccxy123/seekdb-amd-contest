@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 /* seekdb <-> hipVS bridge: plain-C CAGRA kNN; all cuVS/ROCm deps live here. */
 #include "seekdb_cuvs_bridge.h"
 #include <cuvs/core/c_api.h>
@@ -55,10 +56,10 @@ static long sk_param(const char* name, long def)
 
 /* Build tuning. Defaults are the values the contest baseline shipped with, so a
  * run without environment overrides reproduces baseline behaviour exactly. */
-static size_t sk_build_gd(void)    { return (size_t)sk_env_long("SEEKDB_CUVS_GD", 128); }
-static size_t sk_build_igd(void)   { return (size_t)sk_env_long("SEEKDB_CUVS_IGD", 256); }
-static size_t sk_build_niter(void) { return (size_t)sk_env_long("SEEKDB_CUVS_NITER", 100); }
-static int    sk_build_algo(void)  { return (int)sk_env_long("SEEKDB_CUVS_ALGO", 0); }
+static size_t sk_build_gd(void)    { return (size_t)sk_param("SEEKDB_CUVS_GD", 128); }
+static size_t sk_build_igd(void)   { return (size_t)sk_param("SEEKDB_CUVS_IGD", 256); }
+static size_t sk_build_niter(void) { return (size_t)sk_param("SEEKDB_CUVS_NITER", 100); }
+static int    sk_build_algo(void)  { return (int)sk_param("SEEKDB_CUVS_ALGO", 0); }
 
 static void sk_fill_tensor(DLManagedTensor* t, void* data, long* shape, int ndim,
                            DLDeviceType dev, DLDataTypeCode code, int bits)
@@ -117,8 +118,8 @@ fail_res: cuvsResourcesDestroy(h->res); free(h);
 
 static size_t sk_itopk_size(long topk)
 {
-  const long factor = sk_env_long("SEEKDB_CUVS_ITOPK_FACTOR", 4);
-  const long floor_v = sk_env_long("SEEKDB_CUVS_ITOPK_MIN", 512);
+  const long factor = sk_param("SEEKDB_CUVS_ITOPK_FACTOR", 4);
+  const long floor_v = sk_param("SEEKDB_CUVS_ITOPK_MIN", 512);
   size_t required = (size_t)topk * (size_t)(factor > 0 ? factor : 1);
   if (required < (size_t)floor_v) required = (size_t)floor_v;
   return required;
@@ -146,7 +147,7 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
     {
       size_t required_itopk = sk_itopk_size(topk);
       if (sp->itopk_size < required_itopk) sp->itopk_size = required_itopk;
-      sp->search_width = (size_t)sk_env_long("SEEKDB_CUVS_WIDTH", 4);
+      sp->search_width = (size_t)sk_param("SEEKDB_CUVS_WIDTH", 4);
     }
     cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;
     if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }
@@ -184,7 +185,7 @@ int seekdb_cuvs_serialize(void* handle, const char* filename)
   const double t0 = sk_now_ms();
   sk_cuvs_index* index = (sk_cuvs_index*)handle;
   if (!index || !filename) return 1;
-  const int with_dataset = (int)sk_env_long("SEEKDB_CUVS_SER_DATASET", 1);
+  const int with_dataset = (int)sk_param("SEEKDB_CUVS_SER_DATASET", 1);
   if (cuvsCagraSerialize(index->res, filename, index->idx, with_dataset != 0) != CUVS_SUCCESS) {
     fprintf(stderr, "[seekdb_cuvs] serialize failed: %s\n", cuvsGetLastErrorText());
     return 1;
