@@ -61,6 +61,22 @@ wait_ready() {
   return 1
 }
 
+prepare_sql() {
+  local dir=$1
+  python3 - "$dir" "$N" "$DIM" "$NQ" <<'PY'
+import sys, pathlib, struct
+d = pathlib.Path(sys.argv[1]); dim = int(sys.argv[3]); nq = int(sys.argv[4])
+raw = (d / "query.f32").read_bytes()
+for topk in (10, 100):
+    with (d / f"q{topk}.sql").open("w") as f:
+        for i in range(nq):
+            vals = struct.unpack("<%df" % dim, raw[i*dim*4:(i+1)*dim*4])
+            f.write("set ob_query_timeout=600000000; select id from bench.items order by l2_distance(v,[%s]) approximate limit %d;\n"
+                    % (",".join("%.7f" % v for v in vals), topk))
+PY
+}
+[[ -f "$DATA_DIR/q10.sql" && -f "$DATA_DIR/q100.sql" ]] || prepare_sql "$DATA_DIR"
+
 FIRST=$(python3 - "$DATA_DIR" "$DIM" <<'PY'
 import struct, sys, pathlib
 d = pathlib.Path(sys.argv[1]); dim = int(sys.argv[2])
