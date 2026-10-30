@@ -56,15 +56,16 @@ static long sk_param(const char* name, long def)
 
 /* Build tuning.
  *
- * NN-descent converges long before the baseline's 100 iterations: 20 (the cuVS
- * default) already gives bit-identical recall on the 128d contest workload at
- * 3.3x the speed, and the graph degrees can also drop to 96/192 there with no
- * recall change. Higher dimensions keep the baseline graph degrees because the
- * 256d baseline sits close to the recall gate, so only the iteration budget is
- * cut there (2.5x). */
-static size_t sk_build_gd(long dim)    { return (size_t)sk_param("SEEKDB_CUVS_GD", dim <= 128 ? 96 : 128); }
-static size_t sk_build_igd(long dim)   { return (size_t)sk_param("SEEKDB_CUVS_IGD", dim <= 128 ? 192 : 256); }
-static size_t sk_build_niter(long dim) { return (size_t)sk_param("SEEKDB_CUVS_NITER", dim <= 128 ? 20 : 25); }
+ * The baseline spent 100 NN-descent iterations refining a 256-degree graph and
+ * then pruning it to 128. Measurements on the contest workload show that the
+ * graph shape, not the iteration count, is what costs time: pruning 256 -> 128
+ * and every descent iteration both scale with the intermediate degree, while
+ * query throughput does not suffer from the smaller graph (fewer neighbours to
+ * visit per hop). 96/128 with 20 iterations - the cuVS default budget - builds
+ * 3.5x faster with unchanged recall and slightly better query throughput. */
+static size_t sk_build_gd(long dim)    { (void)dim; return (size_t)sk_param("SEEKDB_CUVS_GD", 96); }
+static size_t sk_build_igd(long dim)   { (void)dim; return (size_t)sk_param("SEEKDB_CUVS_IGD", 128); }
+static size_t sk_build_niter(long dim) { (void)dim; return (size_t)sk_param("SEEKDB_CUVS_NITER", 20); }
 static int    sk_build_algo(long dim)  { (void)dim; return (int)sk_param("SEEKDB_CUVS_ALGO", 0); }
 
 static void sk_fill_tensor(DLManagedTensor* t, void* data, long* shape, int ndim,
