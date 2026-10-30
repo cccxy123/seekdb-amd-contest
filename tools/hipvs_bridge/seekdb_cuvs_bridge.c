@@ -56,14 +56,15 @@ static long sk_param(const char* name, long def)
 
 /* Build tuning.
  *
- * NN-descent converges long before the baseline's 100 iterations: on the 128d
- * contest workload 30 iterations give bit-identical recall at 2.3x the speed,
- * and the graph degrees can also drop to 96/192 with no recall change. Higher
- * dimensions keep the baseline graph degrees because the 256d baseline sits
- * close to the recall gate, so only the iteration budget is cut there. */
+ * NN-descent converges long before the baseline's 100 iterations: 20 (the cuVS
+ * default) already gives bit-identical recall on the 128d contest workload at
+ * 3.3x the speed, and the graph degrees can also drop to 96/192 there with no
+ * recall change. Higher dimensions keep the baseline graph degrees because the
+ * 256d baseline sits close to the recall gate, so only the iteration budget is
+ * cut there (2.5x). */
 static size_t sk_build_gd(long dim)    { return (size_t)sk_param("SEEKDB_CUVS_GD", dim <= 128 ? 96 : 128); }
 static size_t sk_build_igd(long dim)   { return (size_t)sk_param("SEEKDB_CUVS_IGD", dim <= 128 ? 192 : 256); }
-static size_t sk_build_niter(long dim) { (void)dim; return (size_t)sk_param("SEEKDB_CUVS_NITER", 30); }
+static size_t sk_build_niter(long dim) { (void)dim; return (size_t)sk_param("SEEKDB_CUVS_NITER", 20); }
 static int    sk_build_algo(long dim)  { (void)dim; return (int)sk_param("SEEKDB_CUVS_ALGO", 0); }
 
 static void sk_fill_tensor(DLManagedTensor* t, void* data, long* shape, int ndim,
