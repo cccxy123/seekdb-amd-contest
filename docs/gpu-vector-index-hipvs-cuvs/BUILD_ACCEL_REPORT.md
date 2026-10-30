@@ -37,15 +37,15 @@ budget:
 
 | dimension | graph_degree | intermediate | nn_descent_niter |
 | --- | ---: | ---: | ---: |
-| <= 128 (SIFT250K) | 96 | 192 | 20 |
-| > 128 (Hidden250K) | 128 | 256 | 25 |
+| all | 96 | 128 | 20 |
 
-The 128d path also shrinks the graph because measurements show no recall change
-there. The 256d path keeps the baseline graph degrees: the 256d baseline recall
-(0.985 / 0.914) sits close to the gate, and the baseline commit that fixed 256d
-recall raised both the graph degrees and the search parameters
-(`itopk=max(4*topk,512)`, `search_width=4`), so the graph shape is left alone
-there and only the over-provisioned iteration budget is cut.
+The graph shape, not the iteration count, is what the baseline over-spent on:
+pruning a 256-degree intermediate graph to 128, and every descent iteration,
+both scale with the intermediate degree, while a smaller final graph is not
+slower to search (it visits fewer neighbours per hop). 96/128 with the cuVS
+default 20 iterations builds 3.5x faster with unchanged recall and query
+throughput at or above baseline. cuVS itself defaults to 64/128, so 96/128
+stays above the library's own quality default.
 
 Search parameters are unchanged from the baseline.
 
@@ -64,6 +64,7 @@ per configuration (identical DDL and SQL shape to the contest):
 | 128/256/20 | 16.90 s | 2.77x | 132.1 | 129.9 | 1.00000 | 0.99998 |
 | 128/256/5 (floor) | 8.07 s | 5.81x | 137.5 | 134.3 | 1.00000 | 0.99991 |
 | 64/128/30 | 14.26 s | 3.29x | 136.0 | 132.7 | 1.00000 | 0.99997 |
+| 96/128/20 | 13.05 s | 3.59x | 142.9 | 141.7 | 1.00000 | 0.99998 |
 
 250K x 256, same protocol:
 
@@ -74,6 +75,9 @@ per configuration (identical DDL and SQL shape to the contest):
 | 128/256/20 | 19.42 s | 2.50x | 126.8 | 123.1 | 0.99995 | 0.99998 |
 | 96/192/20 | 16.49 s | 2.94x | 132.2 | 129.2 | 0.99993 | 0.99998 |
 | 128/256/5 (floor) | 13.94 s | 3.48x | 122.9 | 119.6 | 0.99993 | 0.99989 |
+| 128/192/25 | 18.43 s | 2.58x | 139.1 | 133.8 | 0.99995 | 0.99997 |
+| 96/128/20 | 13.60 s | 3.49x | 141.5 | 138.3 | 0.99993 | 0.99998 |
+| 96/128/1 (floor) | 13.92 s | 3.42x | 122.7 | 120.6 | 0.94768 | 0.94622 |
 
 Recall is unaffected by the build-side change on either dataset. The `niter=5`
 runs bound the fixed cost of the path (table scan, buffer fill, transfer, graph
