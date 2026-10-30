@@ -126,7 +126,15 @@ static size_t sk_itopk_size(long topk)
 {
   const long factor = sk_param("SEEKDB_CUVS_ITOPK_FACTOR", 4);
   const long floor_v = sk_param("SEEKDB_CUVS_ITOPK_MIN", 512);
+  /* Small-k queries do not need the full 512-entry internal top-k: 8*topk still
+   * leaves a large margin, and the search cost scales with itopk. */
+  const long small_topk = sk_param("SEEKDB_CUVS_ITOPK_SMALL_TOPK", 0);
+  const long small_v = sk_param("SEEKDB_CUVS_ITOPK_SMALL", 512);
   size_t required = (size_t)topk * (size_t)(factor > 0 ? factor : 1);
+  if (small_topk > 0 && topk <= small_topk) {
+    if (required < (size_t)small_v) required = (size_t)small_v;
+    return required;
+  }
   if (required < (size_t)floor_v) required = (size_t)floor_v;
   return required;
 }
