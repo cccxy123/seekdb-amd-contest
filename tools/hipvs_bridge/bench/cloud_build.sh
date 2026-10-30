@@ -35,6 +35,13 @@ HIPVS_ROOT=/opt/hipvs ROCM_ROOT=/opt/rocm \
   bash tools/hipvs_bridge/build.sh "$BRIDGE_DIR/libseekdb_cuvs_bridge.so" 2>&1 | tee -a "$LOG" \
   || { log "bridge build failed"; exit 3; }
 
+# The prebuilt image binary resolves the bridge through RPATH, so keep the copy
+# under the image path in sync with what we just built.
+if [[ -d /seekdb_workspace/bridge ]]; then
+  cp "$BRIDGE_DIR/libseekdb_cuvs_bridge.so" /seekdb_workspace/bridge/libseekdb_cuvs_bridge.so
+  log "synced bridge into /seekdb_workspace/bridge"
+fi
+
 log "configuring seekdb (official flags)"
 cmake -S . -B build_release -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
