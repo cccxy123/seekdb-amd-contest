@@ -106,8 +106,12 @@ def recall(ids_path, gt_path, k):
         s = set(row[:k]); g = set(int(x) for x in gt[i])
         hit += len(s & g); total += len(g)
     return hit / total if total else 0.0
-r10 = recall(f"{d}/ids10.tsv", f"{d}/gt10.i32", 10)
-r100 = recall(f"{d}/ids100.tsv", f"{d}/gt100.i32", 100)
+try:
+    r10 = recall(f"{d}/ids10.tsv", f"{d}/gt100.i32", 10)
+    r100 = recall(f"{d}/ids100.tsv", f"{d}/gt100.i32", 100)
+except Exception as exc:  # keep the timing record even if the ids are malformed
+    r10 = r100 = -1.0
+    print("recall failed:", exc, file=sys.stderr)
 rec = {
     "tag": tag, "run": int(run_idx),
     "build_ms": round(build_ms, 1),

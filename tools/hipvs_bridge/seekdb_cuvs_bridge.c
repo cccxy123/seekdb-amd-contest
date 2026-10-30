@@ -27,8 +27,27 @@ static double sk_now_ms(void)
   return (double)ts.tv_sec * 1e3 + (double)ts.tv_nsec / 1e6;
 }
 
-static long sk_env_long(const char* name, long def)
+/* Parameter lookup order: dev override file, then environment, then default.
+ * The file is re-read on every build so a harness can sweep parameters without
+ * restarting the server; it is only written by the benchmark tooling. */
+static long sk_param(const char* name, long def)
 {
+  const char* file = getenv("SEEKDB_CUVS_PARAM_FILE");
+  if (file != NULL && *file != '\0') {
+    FILE* fp = fopen(file, "r");
+    if (fp != NULL) {
+      char line[128];
+      const size_t name_len = strlen(name);
+      long value = def;
+      while (fgets(line, sizeof(line), fp) != NULL) {
+        if (strncmp(line, name, name_len) == 0 && line[name_len] == '=') {
+          value = strtol(line + name_len + 1, NULL, 10);
+        }
+      }
+      fclose(fp);
+      return value;
+    }
+  }
   const char* v = getenv(name);
   if (v == NULL || *v == '\0') return def;
   return strtol(v, NULL, 10);

@@ -102,6 +102,8 @@ else
       --tag "n30-d${dim}:SEEKDB_CUVS_NITER=30" \
       --tag "g96i192n30-d${dim}:SEEKDB_CUVS_GD=96,SEEKDB_CUVS_IGD=192,SEEKDB_CUVS_NITER=30" \
       --tag "g64i128n30-d${dim}:SEEKDB_CUVS_GD=64,SEEKDB_CUVS_IGD=128,SEEKDB_CUVS_NITER=30" \
+      --tag "g64i128n20-d${dim}:SEEKDB_CUVS_GD=64,SEEKDB_CUVS_IGD=128,SEEKDB_CUVS_NITER=20" \
+      --tag "g48i96n20-d${dim}:SEEKDB_CUVS_GD=48,SEEKDB_CUVS_IGD=96,SEEKDB_CUVS_NITER=20" \
       || log "WARN: sweep dim=$dim failed"
   done
 fi
