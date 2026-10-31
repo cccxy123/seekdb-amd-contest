@@ -132,6 +132,16 @@ fail_res: cuvsResourcesDestroy(h->res); free(h);
   return NULL;
 }
 
+static void sk_log_timing(const char* fmt, double a, double b, double c, long nq, long topk)
+{
+  const char* path = getenv("SEEKDB_CUVS_TIMING_FILE");
+  if (path == NULL || *path == 0) return;
+  FILE* fp = fopen(path, "a");
+  if (fp == NULL) return;
+  fprintf(fp, "%s nq=%ld topk=%ld a=%.3f b=%.3f c=%.3f\n", fmt, nq, topk, a, b, c);
+  fclose(fp);
+}
+
 static size_t sk_itopk_size(long topk)
 {
   const long factor = sk_param("SEEKDB_CUVS_ITOPK_FACTOR", 4);
@@ -189,6 +199,7 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
     if (cudaMemcpy(out_ids, nd, sizeof(unsigned)*nq*topk, cudaMemcpyDefault) != cudaSuccess) { rc=16; goto done; }
     if (out_dist) cudaMemcpy(out_dist, dd, sizeof(float)*nq*topk, cudaMemcpyDefault);
     const double t3 = sk_now_ms();
+    sk_log_timing("search", t1 - t0, t2 - t1, t3 - t2, nq, topk);
     if (nq != 1) {
       fprintf(stderr, "[seekdb_cuvs][t] search nq=%ld topk=%ld itopk=%zu width=%zu "
               "setup_ms=%.1f gpu_ms=%.1f copy_ms=%.1f total_ms=%.1f\n",
