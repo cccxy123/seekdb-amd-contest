@@ -35,24 +35,18 @@ work, so that is where the tuning applies.
 The bridge picks the graph shape by dimension and always cuts the iteration
 budget:
 
-| dimension | graph_degree | intermediate | nn_descent_niter |
-| --- | ---: | ---: | ---: |
-| <= 128 | 96 | 128 | 20 |
-| > 128 | 128 | 192 | 100 |
-For the 128d workload the graph shape, not the iteration count, is what the
-baseline over-spent on: pruning a 256-degree intermediate graph to 128, and
-every descent iteration, both scale with the intermediate degree, while a
-smaller final graph is not slower to search. 96/128 with the cuVS default 20
-iterations builds 3.8x faster with unchanged recall and query throughput.
+| dimension | build algorithm | graph_degree | intermediate | nn_descent_niter |
+| --- | --- | ---: | ---: | ---: |
+| <= 128 | NN-descent | 96 | 128 | 20 |
+| > 128 | IVF-PQ | 128 | 192 | n/a |
 
-The 256d workload is different. An official evaluation of a 96/128 graph failed
-every 256d recall gate (recall@100 fell below 0.85 against a 0.914 baseline), so
-`graph_degree` stays exactly at the baseline's 128. What the build cost actually
-scales with is the intermediate graph: an official evaluation of 128/192 passed
-every gate and produced a real speedup, while cutting the NN-descent budget from
-100 to 50 was measured to change the 256d build time by nothing at all on the
-scoring GPU. The 256d path therefore shrinks only the intermediate graph
-(256 -> 192) and leaves the iteration budget untouched.
+The 256d workload is different: it sits on the recall cliff, so the graph shape
+stays at the baseline's final degree 128 with the intermediate 192 that an
+official run already validated. What changes is how the candidate graph is
+built. IVF-PQ builds the same candidate graph several times faster than
+NN-descent - 10.34 s against 40.30 s on the contest workload, with identical
+recall - and it does not spend time on the 100 refinement iterations that made
+previous NN-descent tuning invisible on the scoring machine.
 
 Search parameters are unchanged from the baseline.
 
@@ -85,6 +79,7 @@ per configuration (identical DDL and SQL shape to the contest):
 | 128/192/25 | 18.43 s | 2.58x | 139.1 | 133.8 | 0.99995 | 0.99997 |
 | 96/128/20 | 13.60 s | 3.49x | 141.5 | 138.3 | 0.99993 | 0.99998 |
 | 96/128/1 (floor) | 13.92 s | 3.42x | 122.7 | 120.6 | 0.94768 | 0.94622 |
+| 128/192/100 IVF-PQ | 10.34 s | 4.59x | 130.2 | 126.3 | 0.99995 | 0.99997 |
 
 Recall is unaffected by the build-side change on either dataset. The `niter=5`
 runs bound the fixed cost of the path (table scan, buffer fill, transfer, graph
