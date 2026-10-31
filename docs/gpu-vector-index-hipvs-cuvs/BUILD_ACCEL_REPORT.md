@@ -124,3 +124,24 @@ cmake -S . -B build_release -G "Unix Makefiles" \
   -DCUVS_BRIDGE_LIB=<out>/libseekdb_cuvs_bridge.so
 cmake --build build_release --target seekdb
 ```
+
+## Query-side tuning
+
+Per-query profiling on the contest workload shows the GPU search itself is ~78%
+of a single-row query's wall time (5.39 ms of 6.9 ms), and that no CAGRA search
+knob other than the internal top-k queue moves it: `max_iterations`,
+`hash_mode`, `search_algo` and `thread_block_size` all landed inside run-to-run
+noise. The queue is the knob that matters, because the search is memory-latency
+bound on the graph.
+
+The baseline keeps `itopk = max(4*topk, 512)` - 51x k for Top-10. Dropping to
+`max(2*topk, 256)` leaves a wide margin over k and measured:
+
+| itopk (Top-10 / Top-100) | 128d QPS | 256d QPS | recall |
+| --- | ---: | ---: | --- |
+| 512 / 512 (baseline) | 140.1 / 132.4 | 130.2 / 126.3 | 1.000 / 0.9999 |
+| 256 / 400 | 177.4 / 147.9 | 171.2 / 141.8 | 1.000 / 0.9999 |
+| 256 / 256 (shipped) | 180.0 / 170.8 | 172.0 / 163.0 | 1.000 / 0.9999 |
+
+Per-query device buffers are also reused across searches instead of being
+allocated and freed three times per query (worth ~3% throughput).
