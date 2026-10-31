@@ -192,6 +192,20 @@ int seekdb_cuvs_search(void* handle, const float* query, long nq, long topk,
       size_t required_itopk = sk_itopk_size(topk);
       if (sp->itopk_size < required_itopk) sp->itopk_size = required_itopk;
       sp->search_width = (size_t)sk_param("SEEKDB_CUVS_WIDTH", 4);
+      {
+        long v = sk_param("SEEKDB_CUVS_MAXITER", 0);
+        if (v > 0) sp->max_iterations = (size_t)v;
+        v = sk_param("SEEKDB_CUVS_MINITER", 0);
+        if (v > 0) sp->min_iterations = (size_t)v;
+        v = sk_param("SEEKDB_CUVS_SEARCHALGO", -1);
+        if (v >= 0) sp->algo = (enum cuvsCagraSearchAlgo)v;
+        v = sk_param("SEEKDB_CUVS_HASHMODE", -1);
+        if (v >= 0) sp->hash_mode = (enum cuvsCagraHashMode)v;
+        v = sk_param("SEEKDB_CUVS_TBS", 0);
+        if (v > 0) sp->thread_block_size = (size_t)v;
+        v = sk_param("SEEKDB_CUVS_TEAM", 0);
+        if (v > 0) sp->team_size = (size_t)v;
+      }
     }
     cuvsFilter f; f.type=NO_FILTER; f.addr=(uintptr_t)0;
     if (cuvsCagraSearch(h->res, sp, h->idx, &qt, &nt, &dt, f) != CUVS_SUCCESS) { rc=15; goto done; }
