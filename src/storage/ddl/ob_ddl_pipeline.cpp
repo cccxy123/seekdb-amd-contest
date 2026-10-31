@@ -959,10 +959,81 @@ int ObHNSWIndexAppendBufferOperator::append_row(
   return ret;
 }
 
+// Gather a whole row batch and append it in one call. The per-row path builds an
+// arena, acquires the adaptor guard and enters add_snap_index once per row, which
+// dominates the DDL scan on large vector tables. Rows carrying extra info columns
+// keep the per-row path because their payload has to be encoded per row.
+int ObHNSWIndexAppendBufferOperator::append_batch(
+    const common::ObIArray<common::ObIVector *> &vectors,
+    const int64_t row_count,
+    ObDDLTabletContext *tablet_context,
+    ObArenaAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  const int64_t dim = vec_dim_;
+  const int64_t row_bytes = dim * static_cast<int64_t>(sizeof(float));
+  allocator.reuse();
+  if (row_count <= 0) {
+    // nothing to append
+  } else if (OB_ISNULL(tablet_context) || OB_ISNULL(tablet_context->vector_index_ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid tablet context", K(ret), KP(tablet_context));
+  } else {
+    char *vec_buf = static_cast<char *>(allocator.alloc(row_bytes * row_count));
+    int64_t *vid_buf = static_cast<int64_t *>(allocator.alloc(sizeof(int64_t) * row_count));
+    if (OB_ISNULL(vec_buf) || OB_ISNULL(vid_buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate batch buffers", K(ret), K(dim), K(row_count));
+    } else {
+      int64_t appended = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < row_count; ++i) {
+        ObString vec_str;
+        if (vectors.at(vector_col_idx_)->is_null(i)) {
+          continue;
+        }
+        vec_str = vectors.at(vector_col_idx_)->get_string(i);
+        if (OB_FAIL(read_full_lob_string(allocator, ObLongTextType, CS_TYPE_BINARY, true, vec_str))) {
+        } else if (vec_str.length() == 0) {
+          // empty vector, skip the row
+        } else if (vec_str.length() != static_cast<int32_t>(row_bytes)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected vector length", K(ret), K(vec_str.length()), K(row_bytes), K(i));
+        } else {
+          MEMCPY(vec_buf + appended * row_bytes, vec_str.ptr(), row_bytes);
+          vid_buf[appended] = vectors.at(vector_vid_col_idx_)->get_int(i);
+          ++appended;
+        }
+      }
+      if (OB_SUCC(ret) && appended > 0) {
+        ObIVectorIndexRuntime *vec_index_service =
+            ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
+        ObPluginVectorIndexAdapterGuard adaptor_guard;
+        if (OB_ISNULL(vec_index_service)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("error unexpected, vector index service is nullptr", K(ret));
+        } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(tablet_id_,
+                       ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL, adaptor_guard,
+                       &tablet_context->vector_index_ctx_->vec_idx_param_,
+                       tablet_context->vector_index_ctx_->vec_dim_))) {
+        } else if (OB_ISNULL(adaptor_guard.get_adatper())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("adaptor is null", K(ret));
+        } else if (OB_FAIL(adaptor_guard.get_adatper()->add_snap_index(
+                       reinterpret_cast<float *>(vec_buf), vid_buf, nullptr, 0,
+                       static_cast<int>(appended), nullptr))) {
+          LOG_WARN("failed to append vector batch", K(ret), K(appended));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObHNSWIndexAppendBufferOperator::append_row_file(ObDDLRowFile *row_file, ObDDLTabletContext *tablet_context)
 {
   int ret = OB_SUCCESS;
   ObBatchDatumRows *datum_rows = nullptr;
+  ObArenaAllocator batch_allocator("VecIdxAppend", OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_ISNULL(row_file) || OB_ISNULL(tablet_context)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(row_file), KP(tablet_context));
@@ -978,8 +1049,16 @@ int ObHNSWIndexAppendBufferOperator::append_row_file(ObDDLRowFile *row_file, ObD
     } else {
       const ObArray<common::ObIVector *> &vectors = datum_rows->vectors_;
       const int64_t total_row_count = datum_rows->row_count_;
-      for (int64_t i = 0; OB_SUCC(ret) && i < total_row_count; ++i) {
-        if (OB_FAIL(append_row(i, vectors, tablet_context))) {
+      const bool batchable = extra_column_idx_types_.empty() && vec_dim_ > 0
+          && vectors.count() > vector_vid_col_idx_ && vectors.count() > vector_col_idx_;
+      if (OB_LIKELY(batchable)) {
+        if (OB_FAIL(append_batch(vectors, total_row_count, tablet_context, batch_allocator))) {
+          LOG_WARN("failed to append vector batch", K(ret), K(total_row_count));
+        }
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < total_row_count; ++i) {
+          if (OB_FAIL(append_row(i, vectors, tablet_context))) {
+          }
         }
       }
     }

@@ -299,6 +299,11 @@ private:
       const common::ObIArray<common::ObIVector *> &vectors,
       ObDDLTabletContext *tablet_context);
   int append_row_file(ObDDLRowFile *row_file, ObDDLTabletContext *tablet_context);
+  int append_batch(
+      const common::ObIArray<common::ObIVector *> &vectors,
+      const int64_t row_count,
+      ObDDLTabletContext *tablet_context,
+      ObArenaAllocator &allocator);
 private:
   int64_t vec_dim_;
   common::ObString vec_idx_param_;
