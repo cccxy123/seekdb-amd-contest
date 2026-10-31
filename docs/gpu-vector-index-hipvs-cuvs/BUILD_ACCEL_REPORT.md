@@ -38,17 +38,21 @@ budget:
 | dimension | graph_degree | intermediate | nn_descent_niter |
 | --- | ---: | ---: | ---: |
 | <= 128 | 96 | 128 | 20 |
-| > 128 | 128 | 256 | 50 |
+| > 128 | 128 | 192 | 100 |
 For the 128d workload the graph shape, not the iteration count, is what the
 baseline over-spent on: pruning a 256-degree intermediate graph to 128, and
 every descent iteration, both scale with the intermediate degree, while a
 smaller final graph is not slower to search. 96/128 with the cuVS default 20
 iterations builds 3.8x faster with unchanged recall and query throughput.
 
-The 256d workload is different: an official evaluation of the 96/128/20 graph
-failed every 256d recall gate (recall@100 fell below 0.85 against a 0.914
-baseline), so the graph shape there stays exactly at the baseline's 128/256 and
-only the over-provisioned iteration budget is halved.
+The 256d workload is different. An official evaluation of a 96/128 graph failed
+every 256d recall gate (recall@100 fell below 0.85 against a 0.914 baseline), so
+`graph_degree` stays exactly at the baseline's 128. What the build cost actually
+scales with is the intermediate graph: an official evaluation of 128/192 passed
+every gate and produced a real speedup, while cutting the NN-descent budget from
+100 to 50 was measured to change the 256d build time by nothing at all on the
+scoring GPU. The 256d path therefore shrinks only the intermediate graph
+(256 -> 192) and leaves the iteration budget untouched.
 
 Search parameters are unchanged from the baseline.
 
